@@ -1,0 +1,7 @@
+POST http://localhost:3000/bookings
+Content-Type: application/json
+
+{
+  "student_id": "dc72d2cf-37be-455a-bc0f-b739bf367013",
+  "group_id": "51f112bf-c51e-4276-87ba-0fff958c163d"
+}

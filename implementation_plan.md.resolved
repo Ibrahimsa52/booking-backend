@@ -1,0 +1,180 @@
+# Full System Upgrade Plan
+
+Three features combined into one implementation:
+1. **Registration + Approval** — step-by-step student onboarding, bookings start as `pending`
+2. **Waitlist** — if a group is full, student joins a queue and is notified when a spot opens
+3. **General Interest** — if no group time works, student leaves a preferred time note
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Pending bookings and capacity:** A pending booking **does not** reserve a seat. A seat is only locked when the teacher approves. This prevents unreviewed requests from blocking real students. Confirm this is intended.
+
+> [!IMPORTANT]
+> **Waitlist notifications are push-only.** When a spot opens, the bot messages all waitlisted students automatically. There is no manual "offer" step — all waitlisted students for that group get notified simultaneously and whoever books first wins the seat.
+
+---
+
+## Database Migrations
+
+Run this SQL on Supabase **before** deploying:
+
+```sql
+-- 1. Add fields to students
+ALTER TABLE students
+  ADD COLUMN phone_number TEXT,
+  ADD COLUMN is_registered BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- 2. Add status + parent_phone to bookings
+CREATE TYPE booking_status AS ENUM ('pending', 'approved', 'rejected');
+ALTER TABLE bookings
+  ADD COLUMN status        booking_status NOT NULL DEFAULT 'pending',
+  ADD COLUMN parent_phone  TEXT;
+
+-- 3. New waitlist_requests table
+CREATE TYPE waitlist_type AS ENUM ('waitlist', 'general');
+
+CREATE TABLE waitlist_requests (
+  id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id          UUID        NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  group_id            UUID        REFERENCES groups(id) ON DELETE SET NULL,
+  preferred_time_text TEXT,
+  type                waitlist_type NOT NULL,
+  notified_at         TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Index for fast lookup when a spot opens
+CREATE INDEX idx_waitlist_group ON waitlist_requests (group_id) WHERE type = 'waitlist';
+-- Index for notifying general interest users when new group is added
+CREATE INDEX idx_waitlist_general ON waitlist_requests (type) WHERE type = 'general';
+```
+
+> [!NOTE]
+> **Capacity trigger update:** The existing `trg_manage_booking_count` trigger increments `booked_count` on INSERT. Since pending bookings should not consume capacity, the trigger must be updated to only increment when `status = 'approved'`. The API's `PATCH /bookings/:id/status` will handle the increment on approval instead.
+
+---
+
+## Proposed Changes
+
+### Backend API
+
+#### [MODIFY] [students.js](file:///d:/DIV%20WORK/Coding/%D8%AD%D8%AC%D8%B2/src/routes/students.js)
+- `POST /students` — add `phone_number`, `is_registered` fields
+- `GET /students/:telegram_user_id` — no change
+
+#### [MODIFY] [bookings.js](file:///d:/DIV%20WORK/Coding/%D8%AD%D8%AC%D8%B2/src/routes/bookings.js)
+- `POST /bookings` — add `parent_phone`, insert with `status = 'pending'`, **no capacity decrement**
+- `GET /bookings?student_id=` — return `status`, `group_name`, `grade_name`
+- **[NEW]** `PATCH /bookings/:id/status` — `{ status: 'approved' | 'rejected' }`. On `approved`: increment `booked_count`, notify student. On `rejected`: notify student.
+- **[NEW]** `GET /bookings/pending` — all pending bookings with student + group info (admin use)
+
+#### [NEW] [waitlist.js](file:///d:/DIV%20WORK/Coding/%D8%AD%D8%AC%D8%B2/src/routes/waitlist.js)
+- `POST /waitlist` — `{ student_id, group_id?, preferred_time_text?, type }` — insert a waitlist or general interest record
+- `GET /waitlist?group_id=` — get all waitlist entries for a group (used to notify on approval cancellation)
+- `GET /waitlist/general` — get all general interest entries (used to notify on new group)
+
+---
+
+### Bot Conversation Flow
+
+#### `/start` — New Student (is_registered = false)
+```
+Bot: "اهلا بيك في البوت الرسمي لمستر [NAME] 👋
+     برجاء ادخال اسمك بالكامل"
+User: [types name]
+
+Bot: "ادخل رقم تليفونك"
+User: [types phone]
+
+Bot: "ادخل رقم تليفون ولي الامر"
+User: [types parent phone]
+
+→ POST /students (full registration)
+
+Bot: shows grade list (inline keyboard)
+User: selects grade
+
+Bot: shows groups with status:
+  ✅ Math Morning | Mon 10:00–12:00 (5 seats)
+  ⛔ Science Eve  | Wed 17:00–19:00 (FULL)
+  [❓ No suitable time for me]
+
+IF user selects available group:
+  → POST /bookings (status = pending)
+  Bot: "تم ارسال طلبك وجاري المراجعة ✅"
+
+IF user selects FULL group:
+  Bot: "هذه المجموعة ممتلئة حالياً. هل تريد الانضمام للقائمة الانتظار؟"
+  [✅ انضم لقائمة الانتظار] [↩️ اختار مجموعة تانية]
+
+  If joins waitlist:
+    → POST /waitlist { type: 'waitlist', group_id }
+    Bot: "تم تسجيلك في قائمة الانتظار. هنبعتلك لما تتاح مكان ✅"
+
+IF user taps "No suitable time":
+  Bot: "ايه الوقت المناسب ليك؟ اكتبه بحرية"
+  User: [types preferred time]
+  → POST /waitlist { type: 'general', preferred_time_text }
+  Bot: "شكراً! لما نضيف مجموعة جديدة هنبعتلك ✅"
+```
+
+#### `/start` — Existing Student (is_registered = true)
+```
+Bot shows:
+  👤 الاسم: [name]
+  📚 المجموعة: [group name + day + time]
+  📋 الحالة:
+    pending  → "طلبك قيد المراجعة ⏳"
+    approved → "تم قبولك في المجموعة ✅"
+    rejected → "تم رفض طلبك ❌"
+
+  [✏️ تعديل المجموعة]
+```
+
+#### `تعديل المجموعة` button
+- Set current booking `cancelled_at = NOW()`
+- Re-show grade → group selection
+- New booking saved as `pending`
+- Check if any waitlisted student should be notified of freed slot
+
+#### Admin: `/admin`
+- Only works for `ADMIN_TELEGRAM_ID`
+```
+Bot: "الطلبات المعلقة (N)"
+  For each pending booking:
+    👤 [Name] | 📱 [Phone] | 👨‍👩‍👦 [Parent Phone]
+    📚 [Group] | 🗓 [Day + Time]
+    [✅ قبول]  [❌ رفض]  [➡️ اقترح مجموعة تانية]
+```
+- On ✅ قبول → `PATCH /bookings/:id/status { approved }` → bot notifies student
+- On ❌ رفض → `PATCH /bookings/:id/status { rejected }` → bot notifies student
+
+---
+
+### [MODIFY] [api.js](file:///d:/DIV%20WORK/Coding/%D8%AD%D8%AC%D8%B2/src/services/api.js)
+Add: `joinWaitlist()`, `getGeneralInterestList()`, `getWaitlistByGroup()`, `updateBookingStatus()`
+
+### [.env](file:///d:/DIV%20WORK/Coding/%D8%AD%D8%AC%D8%B2/.env) addition
+```env
+ADMIN_TELEGRAM_ID=123456789
+```
+
+---
+
+## Verification Plan
+
+| # | Scenario | Expected |
+|---|---|---|
+| 1 | New student `/start` | Step-by-step form: name → phone → parent phone |
+| 2 | Select available group | "تم ارسال طلبك وجاري المراجعة" |
+| 3 | Select full group | "ممتلئة" + waitlist offer |
+| 4 | Join waitlist | Saved, confirmation shown |
+| 5 | "No suitable time" | Bot prompts for preferred time, saves as `general` |
+| 6 | Existing user `/start` | Shows name + group + Arabic status |
+| 7 | Admin `/admin` | Lists all pending with Approve/Reject buttons |
+| 8 | Admin approves | Student receives approval notification |
+| 9 | Admin rejects | Student receives rejection notification |
+| 10 | Student changes group | Old booking cancelled, waitlist for that group notified |

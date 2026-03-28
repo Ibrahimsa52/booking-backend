@@ -1,0 +1,60 @@
+# Teacher Booking System Design (Hardened)
+
+## 1. Step-by-Step User Flow
+
+### Teacher Flow (Web Dashboard)
+1. **Authentication:** Teacher logs into the dashboard via secure credentials with mandatory Two-Factor Authentication (2FA).
+2. **Grade Management:** Teacher navigates to the "Grades" module to create or manage grades.
+3. **Group Management:** Under a selected grade, the teacher creates a new group.
+4. **Group Configuration:** The teacher defines the strict group parameters:
+   - **Name:** (e.g., "Math Morning Group")
+   - **Schedule:** Exact UTC start time and end time.
+   - **Capacity:** Hard maximum number of students allowed.
+   - **Booking Window:** Strict timeframe when booking opens and closes (e.g., opens 48 hours before, closes 1 hour before).
+5. **Monitoring:** The teacher can view the roster, force-remove abusive users, and manually override capacity if absolutely necessary.
+
+### Student Flow (Telegram Bot)
+1. **Onboarding & Verification:** Student sends `/start`. The bot **mandates** sharing their Telegram Phone Number (via Telegram's native contact sharing) to verify uniqueness and deter multi-account abuse.
+2. **Grade Selection:** Bot presents an inline keyboard of available grades.
+3. **Group Selection:** Bot lists active groups within the allowed booking window. Groups outside the window or full are explicitly marked as "Closed".
+4. **Booking Attempt:** Student clicks "Book". The request includes a single-use token to prevent replay attacks.
+5. **Validation & Confirmation:** The backend performs a strictly serialized transaction check. If successful, the bot confirms the booking.
+6. **Cancellation:** Student can access active bookings and click "Cancel", subject to strict penalty rules (e.g., no cancellations within 2 hours of start time).
+
+---
+
+## 2. Strict Business Rules & Abuse Prevention
+
+*   **Rule 1: Hard Identity Verification:** A student is uniquely identified by their verified **Phone Number**, not just their Telegram User ID. This prevents malicious users from creating dozens of fake Telegram accounts to hoard seats.
+*   **Rule 2: Absolute Single Booking Constraint:** A student cannot book the same group twice. The database must strictly enforce a `UNIQUE (user_phone_number, group_id)` constraint. Any violation throws a fatal database error. 
+*   **Rule 3: Hoarding Prevention (Global Limit):** A student can hold a maximum of *N* active bookings across *all* groups at any given time (e.g., max 3 active bookings per week).
+*   **Rule 4: Cancellation Penalties:** 
+    *   Cancellations are strictly forbidden within *X* hours (e.g., 2 hours) of the group's start time.
+    *   If a student cancels more than *Y* times in a 7-day period, they receive an automatic 7-day ban from making any new bookings.
+*   **Rule 5: Booking Window Enforcement:** No bookings are accepted before the "booking opens" timestamp or after the "booking closes" timestamp. The database logic must reject any inserts outside this exact window, regardless of UI state.
+
+---
+
+## 3. Edge Cases & Concurrency Handling
+
+*   **Edge Case 1: High-Frequency Clicking (DDoS / Scripting / Botting)**
+    *   *Attack:* A user runs a script to send 1,000 `/book` requests per second.
+    *   *Hardened Handling:* Implement a strict API rate-limiter (e.g., Token Bucket in Redis) allowing max 1 booking request per second per user. Drop excess requests immediately before they hit the database. Apply a temporary 15-minute ban if the threshold is exceeded repeatedly.
+*   **Edge Case 2: The "Last Seat" Race Condition**
+    *   *Attack:* 50 users try to book the last seat at the exact same millisecond.
+    *   *Hardened Handling:* The database must use an atomic operation. Example: `UPDATE groups SET booked_count = booked_count + 1 WHERE id = X AND booked_count < max_students RETURNING id;`. Only the very first successful connection will update the row and proceed to `INSERT` the booking record. All others will fail the `booked_count < max_students` condition and be rejected.
+*   **Edge Case 3: Replay Attacks on Callback Buttons**
+    *   *Attack:* User captures the Telegram callback data payload and replays it later to bypass UI restrictions.
+    *   *Hardened Handling:* Every inline "Book" button must contain a cryptographically signed payload or a single-use token (nonce) that expires after a short period (e.g., 5 minutes) or upon first use.
+*   **Edge Case 4: Teacher Modifies Capacity While Bookings Exist**
+    *   *Scenario:* Teacher attempts to lower capacity to 15, but 18 students are already enrolled.
+    *   *Hardened Handling:* The database strictly rejects this update. The backend enforces that `new_capacity >= current_booked_count`. The teacher must manually select and kick 3 specific students before the system allows the capacity reduction to save.
+
+---
+
+## 4. System Reliability & Audit Architecture
+
+1.  **Strict ACID Transactions:** Every state-changing operation (booking, cancelling) must be wrapped in an SQL transaction with a `SERIALIZABLE` isolation level to guarantee absolute consistency and prevent phantom reads.
+2.  **Immutable Audit Log:** Every single action (login, profile creation, booking success, booking failure, cancellation, group modification) is written to an append-only `audit_logs` table containing: `timestamp`, `actor_phone_number`, `action_type`, `target_group_id`, and `ip_address/device_info`. This allows for programmatic banning of abusive actors.
+3.  **Webhook Idempotency:** Telegram guarantees at-least-once delivery, meaning it might send the same webhook twice if the server is slow. Every incoming webhook ID must be logged in a `processed_webhooks` cache (stored for 24h). If Telegram retries a webhook, the system ignores it if the ID already exists.
+4.  **Source of Truth:** Caches (e.g., Redis) are ONLY used for reading the UI list to keep the bot fast. The final GO/NO-GO decision for a booking *must* always query the primary write-database directly, never the read-cache.
