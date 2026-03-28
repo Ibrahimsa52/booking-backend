@@ -94,4 +94,42 @@ router.get('/:id', async (req, res) => {
     }
 });
 
+// PATCH /groups/:id — Update a group's fields
+router.patch('/:id', async (req, res) => {
+    const { name, day_of_week, start_time, end_time, max_students } = req.body;
+    if (day_of_week && !VALID_DAYS.includes(day_of_week)) {
+        return res.status(400).json({ error: `day_of_week must be one of: ${VALID_DAYS.join(', ')}.` });
+    }
+    try {
+        const result = await pool.query(
+            `UPDATE groups
+             SET name         = COALESCE($1, name),
+                 day_of_week  = COALESCE($2, day_of_week),
+                 start_time   = COALESCE($3, start_time),
+                 end_time     = COALESCE($4, end_time),
+                 max_students = COALESCE($5, max_students)
+             WHERE id = $6
+             RETURNING *`,
+            [name || null, day_of_week || null, start_time || null, end_time || null, max_students || null, req.params.id]
+        );
+        if (!result.rows.length) return res.status(404).json({ error: 'Group not found.' });
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
+});
+
+// DELETE /groups/:id — Delete a group
+router.delete('/:id', async (req, res) => {
+    try {
+        const result = await pool.query(`DELETE FROM groups WHERE id = $1 RETURNING id`, [req.params.id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Group not found.' });
+        res.json({ success: true });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Internal server error.' });
+    }
+});
+
 module.exports = router;

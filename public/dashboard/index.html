@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة القيادة | إدارة الحجوزات</title>
+    <link rel="stylesheet" href="style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Inter:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+</head>
+
+<body>
+    <div class="dashboard-layout">
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="ph ph-calendar-check"></i>
+            </div>
+            <nav class="nav-links">
+                <a href="#" class="nav-item active" data-page="overview" title="نظرة عامة">
+                    <i class="ph ph-house"></i>
+                </a>
+                <a href="#" class="nav-item" data-page="bookings" title="الطلبات">
+                    <i class="ph ph-file-text"></i>
+                </a>
+                <a href="#" class="nav-item" data-page="calendar" title="جدول المواعيد">
+                    <i class="ph ph-calendar-blank"></i>
+                </a>
+                <a href="#" class="nav-item" data-page="students" title="الطلاب">
+                    <i class="ph ph-users"></i>
+                </a>
+                <a href="#" class="nav-item" data-page="waitlist" title="قائمة الانتظار">
+                    <i class="ph ph-clock"></i>
+                </a>
+            </nav>
+            <div class="bottom-links">
+                <a href="#" class="nav-item" data-page="settings" title="الإعدادات">
+                    <i class="ph ph-gear"></i>
+                </a>
+                <a href="#" class="nav-item" id="logout-btn" title="تسجيل الخروج" style="color: var(--color-danger);">
+                    <i class="ph ph-sign-out"></i>
+                </a>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+
+            <!-- Page: Overview -->
+            <section id="page-overview" class="page-section active">
+                <header class="page-header">
+                    <div class="header-left">
+                        <h1>نظرة عامة</h1>
+                        <p class="subtitle">أهلاً بك، <span id="welcome-name">مدير</span></p>
+                    </div>
+                </header>
+                <div class="stat-cards" id="stats-container">
+                    <div class="card stat-card loading">جاري التحميل...</div>
+                </div>
+                <div class="content-row">
+                    <div class="card recent-bookings">
+                        <div class="card-header">
+                            <h2>أحدث الطلبات المعلقة</h2>
+                            <button class="btn-secondary btn-sm" onclick="app.switchPage('bookings')">عرض الكل</button>
+                        </div>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>الطالب</th>
+                                        <th>الصف</th>
+                                        <th>المجموعة</th>
+                                        <th>التاريخ</th>
+                                        <th>إجراء</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recent-pending-tbody">
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted">جاري التحميل...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Page: Bookings -->
+            <section id="page-bookings" class="page-section">
+                <header class="page-header">
+                    <div class="header-left">
+                        <h1>إدارة الطلبات المعلقة</h1>
+                        <p class="subtitle">مراجعة طلبات الحجز المفتوحة</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn-primary" onclick="app.refreshBookings()"><i
+                                class="ph ph-arrows-clockwise"></i> تحديث</button>
+                    </div>
+                </header>
+                <div class="card full-table-card">
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>الطالب</th>
+                                    <th>هاتف الطالب</th>
+                                    <th>هاتف الوالد</th>
+                                    <th>الصف</th>
+                                    <th>المجموعة</th>
+                                    <th>التاريخ</th>
+                                    <th class="text-left">الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bookings-tbody">
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted">لا يوجد طلبات معلقة.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Page: Calendar / Groups -->
+            <section id="page-calendar" class="page-section">
+                <header class="page-header">
+                    <div class="header-left">
+                        <h1>جدول المواعيد والمجموعات</h1>
+                        <p class="subtitle">استعراض وإدارة المجموعات</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn-primary" onclick="app.openModal('add-group-modal')"><i
+                                class="ph ph-plus"></i> إضافة مجموعة</button>
+                    </div>
+                </header>
+
+                <div class="calendar-grid-wrapper">
+                    <div class="calendar-days-header">
+                        <div class="day-col-header">السبت</div>
+                        <div class="day-col-header">الأحد</div>
+                        <div class="day-col-header">الإثنين</div>
+                        <div class="day-col-header">الثلاثاء</div>
+                        <div class="day-col-header">الأربعاء</div>
+                        <div class="day-col-header">الخميس</div>
+                        <div class="day-col-header">الجمعة</div>
+                    </div>
+                    <div class="calendar-grid" id="calendar-grid"></div>
+                </div>
+            </section>
+
+            <!-- Page: Students -->
+            <section id="page-students" class="page-section">
+                <header class="page-header">
+                    <div class="header-left">
+                        <h1>الطلاب المسجلون</h1>
+                        <p class="subtitle">إدارة قائمة الطلاب</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn-primary" onclick="app.refreshStudents()"><i
+                                class="ph ph-arrows-clockwise"></i> تحديث</button>
+                    </div>
+                </header>
+                <div class="card full-table-card">
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>الاسم</th>
+                                    <th>هاتف الطالب</th>
+                                    <th>هاتف الوالد</th>
+                                    <th>تاريخ التسجيل</th>
+                                    <th class="text-left">الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="students-tbody">
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">جاري التحميل...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Page: Waitlist -->
+            <section id="page-waitlist" class="page-section">
+                <header class="page-header">
+                    <div class="header-left">
+                        <h1>قائمة الانتظار</h1>
+                        <p class="subtitle">الطلاب المنتظرون ومن أبدوا اهتمامًا</p>
+                    </div>
+                </header>
+                <div class="card full-table-card">
+                    <div class="card-header border-bottom">
+                        <h3>اهتمام عام (لا يوجد وقت مناسب)</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>الطالب</th>
+                                    <th>تاريخ التسجيل</th>
+                                </tr>
+                            </thead>
+                            <tbody id="general-waitlist-tbody">
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted">لا يوجد.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Page: Settings -->
+            <section id="page-settings" class="page-section">
+                <header class="page-header">
+                    <div class="header-left">
+                        <h1>الإعدادات</h1>
+                        <p class="subtitle">تخصيص لوحة التحكم</p>
+                    </div>
+                </header>
+
+                <!-- Theme -->
+                <div class="card settings-card">
+                    <div class="card-header border-bottom">
+                        <h3>المظهر</h3>
+                    </div>
+                    <div class="settings-row">
+                        <div>
+                            <strong>الوضع الداكن (Dark Mode)</strong>
+                            <p class="text-muted" style="font-size:13px;margin-top:4px;">تغيير المظهر بين الداكن والفاتح
+                            </p>
+                        </div>
+                        <label class="theme-switch">
+                            <input type="checkbox" id="theme-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Change Password -->
+                <div class="card settings-card">
+                    <div class="card-header border-bottom">
+                        <h3>تغيير كلمة المرور</h3>
+                    </div>
+                    <div style="padding: 24px;">
+                        <div class="form-grid">
+                            <div class="form-group-inline">
+                                <label>كلمة المرور الحالية</label>
+                                <input type="password" id="cp-current" placeholder="••••••••">
+                            </div>
+                            <div class="form-group-inline">
+                                <label>كلمة المرور الجديدة</label>
+                                <input type="password" id="cp-new" placeholder="••••••••">
+                            </div>
+                        </div>
+                        <div id="cp-msg" style="margin:12px 0;font-size:14px;"></div>
+                        <button class="btn-primary" onclick="app.changePassword()">حفظ كلمة المرور الجديدة</button>
+                    </div>
+                </div>
+
+                <!-- Super Admin: Manage Users -->
+                <div class="card settings-card" id="super-admin-section" style="display:none;">
+                    <div class="card-header border-bottom">
+                        <h3>👑 إدارة المديرين</h3>
+                        <button class="btn-primary btn-sm" onclick="app.openModal('add-user-modal')"><i
+                                class="ph ph-plus"></i> مستخدم جديد</button>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>اسم المستخدم</th>
+                                    <th>تاريخ الإضافة</th>
+                                    <th class="text-left">الإجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-tbody">
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">جاري التحميل...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- ═══ MODALS ═══════════════════════════════════════════════════════ -->
+
+    <!-- Add Group Modal -->
+    <div class="modal-overlay" id="add-group-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>إضافة مجموعة جديدة</h3>
+                <button class="modal-close" onclick="app.closeModal('add-group-modal')"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group-inline">
+                    <label>الصف الدراسي</label>
+                    <select id="ag-grade">
+                        <option value="">-- اختر --</option>
+                    </select>
+                </div>
+                <div class="form-group-inline">
+                    <label>اسم المجموعة</label>
+                    <input type="text" id="ag-name" placeholder="مثال: مجموعة 1">
+                </div>
+                <div class="form-group-inline">
+                    <label>اليوم</label>
+                    <select id="ag-day">
+                        <option value="Saturday">السبت</option>
+                        <option value="Sunday">الأحد</option>
+                        <option value="Monday">الإثنين</option>
+                        <option value="Tuesday">الثلاثاء</option>
+                        <option value="Wednesday">الأربعاء</option>
+                        <option value="Thursday">الخميس</option>
+                        <option value="Friday">الجمعة</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group-inline">
+                        <label>من</label>
+                        <input type="time" id="ag-start">
+                    </div>
+                    <div class="form-group-inline">
+                        <label>إلى</label>
+                        <input type="time" id="ag-end">
+                    </div>
+                </div>
+                <div class="form-group-inline">
+                    <label>أقصى عدد طلاب</label>
+                    <input type="number" id="ag-max" min="1" value="20">
+                </div>
+                <div id="ag-error" style="color:var(--color-danger);font-size:13px;margin-top:8px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="app.closeModal('add-group-modal')">إلغاء</button>
+                <button class="btn-primary" onclick="app.addGroup()">إضافة</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add User Modal (Super Admin) -->
+    <div class="modal-overlay" id="add-user-modal">
+        <div class="modal-card" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>إضافة مدير جديد</h3>
+                <button class="modal-close" onclick="app.closeModal('add-user-modal')"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group-inline">
+                    <label>اسم المستخدم</label>
+                    <input type="text" id="au-username" placeholder="username">
+                </div>
+                <div class="form-group-inline">
+                    <label>كلمة المرور</label>
+                    <input type="password" id="au-password" placeholder="••••••••">
+                </div>
+                <div id="au-error" style="color:var(--color-danger);font-size:13px;margin-top:8px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="app.closeModal('add-user-modal')">إلغاء</button>
+                <button class="btn-primary" onclick="app.addUser()">إضافة</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Request Info Modal -->
+    <div class="modal-overlay" id="request-info-modal">
+        <div class="modal-card" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3>طلب تحديث بيانات</h3>
+                <button class="modal-close" onclick="app.closeModal('request-info-modal')"><i
+                        class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <p style="margin-bottom:16px;font-size:14px;">اختر الحقل الناقص وسيُرسل للطالب رسالة على تيليجرام يطلب
+                    منه إدخاله:</p>
+                <div class="form-group-inline">
+                    <label>الحقل الناقص</label>
+                    <select id="ri-field">
+                        <option value="phone_number">رقم هاتف الطالب</option>
+                        <option value="parent_phone">رقم هاتف ولي الأمر</option>
+                        <option value="full_name">الاسم الثلاثي</option>
+                    </select>
+                </div>
+                <div id="ri-msg" style="font-size:13px;margin-top:8px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="app.closeModal('request-info-modal')">إلغاء</button>
+                <button class="btn-primary" onclick="app.sendRequestInfo()">إرسال الطلب</button>
+            </div>
+        </div>
+    </div>
+    <input type="hidden" id="ri-student-id">
+
+    <!-- Edit Group Modal -->
+    <div class="modal-overlay" id="edit-group-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>✏️ تعديل المجموعة</h3>
+                <button class="modal-close" onclick="app.closeModal('edit-group-modal')"><i
+                        class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="eg-id">
+                <div class="form-group-inline">
+                    <label>اسم المجموعة</label>
+                    <input type="text" id="eg-name" placeholder="مثال: مجموعة 1">
+                </div>
+                <div class="form-group-inline">
+                    <label>اليوم</label>
+                    <select id="eg-day">
+                        <option value="Saturday">السبت</option>
+                        <option value="Sunday">الأحد</option>
+                        <option value="Monday">الإثنين</option>
+                        <option value="Tuesday">الثلاثاء</option>
+                        <option value="Wednesday">الأربعاء</option>
+                        <option value="Thursday">الخميس</option>
+                        <option value="Friday">الجمعة</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <div class="form-group-inline">
+                        <label>من</label>
+                        <input type="time" id="eg-start">
+                    </div>
+                    <div class="form-group-inline">
+                        <label>إلى</label>
+                        <input type="time" id="eg-end">
+                    </div>
+                </div>
+                <div class="form-group-inline">
+                    <label>أقصى عدد طلاب</label>
+                    <input type="number" id="eg-max" min="1">
+                </div>
+                <div id="eg-error" style="color:var(--color-danger);font-size:13px;margin-top:8px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="app.closeModal('edit-group-modal')">إلغاء</button>
+                <button class="btn-primary" onclick="app.saveEditGroup()">حفظ التعديلات</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
