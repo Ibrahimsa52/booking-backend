@@ -1,16 +1,16 @@
-require('dotenv').config();
+const express = require('express');
+const path = require('path');
 
-// ── Start Express API server ──────────────────────────────────────────────────
-const app = require('./app');
+const app = express();
 
-// مهم: Railway بيدي PORT تلقائي
-const PORT = process.env.PORT || 3000;
+// خلي السيرفر يقرأ فولدر public
+app.use(express.static(path.join(__dirname, '../public')));
 
-// مهم جدًا: 0.0.0.0 بدل localhost
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+// لما حد يفتح الموقع
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/dashboard/index.html'));
 });
 
-// ── Start Telegram bot (registers polling + all handlers) ─────────────────────
-require('./bot/handlers');
-console.log('🤖 Telegram bot started');
+app.listen(process.env.PORT || 8080, () => {
+  console.log('Server running');
+});
