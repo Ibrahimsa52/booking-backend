@@ -1,14 +1,18 @@
 const express = require('express');
+const path = require('path');
 
 const app = express();
-const path = require('path');
 
 // يخلي السيرفر يشوف فولدر public
 app.use(express.static(path.join(__dirname, '../public')));
 
-
-// لما حد يفتح الموقع
+// الصفحة الرئيسية
 app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/dashboard/index.html'));
+});
+
+// أي route تاني يرجع نفس الداشبورد (مهم جداً)
+app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/dashboard/index.html'));
 });
 
