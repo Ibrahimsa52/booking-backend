@@ -1,11 +1,11 @@
 const express = require('express');
-const path = require('path');
 
 const app = express();
 const path = require('path');
 
 // يخلي السيرفر يشوف فولدر public
 app.use(express.static(path.join(__dirname, '../public')));
+
 
 // لما حد يفتح الموقع
 app.get('/', (req, res) => {
